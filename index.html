@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+	<title>osm-highlighter</title>
+
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A==" crossorigin=""/>
+	<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js" integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA==" crossorigin=""></script>
+
+	<style>
+		tr:nth-child(odd) {
+			background-color: #EEE;
+		}
+		tr:nth-child(even) {
+			background-color: #FFF;
+		}
+
+		.overlayitems {
+			float: right;
+		}
+		.formlabel {
+			display: inline !important;
+		}
+
+		.popupcontentdiv {
+			overflow-x: hidden;
+			overflow-y: auto;
+			max-height: 33vh;
+		}
+
+		.speech-bubble {
+			position: relative;
+			background: #dfdfdf;
+			border-radius: .4em;
+			padding: 1ex;
+			margin: 1ex;
+		}
+		.speech-bubble:after {
+			content: '';
+			position: absolute;
+			top: 50%;
+			width: 0;
+			height: 0;
+			border: 0.625em solid transparent;
+		}
+		.speech-bubble:nth-child(odd):after {
+			left: 0;
+			border-right-color: #dfdfdf;
+			border-left: 0;
+			margin-top: -0.625em;
+			margin-left: -0.625em;
+		}
+		.speech-bubble:nth-child(even):after {
+			right: 0;
+			border-left-color: #dfdfdf;
+			border-right: 0;
+			margin-top: -0.625em;
+			margin-right: -0.625em;
+		}
+		.speech-bubble p {
+			margin: 0;
+		}
+
+		.note_meta_translate_img {
+			vertical-align: middle;
+			width: 2em;
+			height: 2em;
+		}
+		.note_meta_helper {
+			display: inline-block;
+			height: 100%;
+			vertical-align: middle;
+		}
+		.note_meta {
+			font-size: smaller;
+			font-style: italic;
+		}
+		.note_action {
+			text-transform: capitalize;
+		}
+	</style>
+</head>
+<body>
+
+<div>
+	<label for="showNotesCheckbox" style="vertical-align: 1ex;">Show Notes from OSM</label><input style="vertical-align: 1ex;" type="checkbox" id="showNotesCheckbox" />
+	<label for="slide" style="vertical-align: 1ex;">Opacity:</label>&nbsp;<input id="slide" type="range" min="0" max="1" step="0.1" value="0.5" onchange="updateOpacity(this.value)" />
+	<div style="display:inline; vertical-align: 1ex;" id="featurecount"></div>
+</div>
+<div id="mapid" style="width: 99vw; height: 98vh;"></div>
+
+<script>
+	const map = L.map('mapid').setView([57.7000, 12.000], 13);
+	var layerGroup;
+	var notesLayerGroup;
+	var autopanning = false;
+	var currentPopup;
+
+	function toggleFunction(bool) {
+		alert(bool)
+	}
+	const command = L.control({position: 'topright'});
+	command.onAdd = () => {
+		const div = L.DomUtil.create('div');
+		div.innerHTML = `
+    <div class="leaflet-control-layers leaflet-control-layers-expanded overlayitems">
+      <form>
+        <input class="leaflet-control-layers-overlays" id="command" onclick=toggleFunction(this.checked) type="checkbox" />
+        <label class=formlabel for="command">Show Notes</label>
+        <label for="slidez" style="vertical-align: 1ex;">Opacity:</label>&nbsp;<input id="slidez" type="range" min="0" max="1" step="0.1" value="0.5" onchange="updateOpacity(this.value)" />
+      </form>
+    </div>`;
+		return div;
+	};
+	command.addTo(map); //your map variable
+
+
+
+	const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+		maxZoom: 19,
+		opacity: 0.5,
+		attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
+						'<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>'
+	}).addTo(map);
+
+	function updateOpacity(value) {
+		tileLayer.setOpacity(value);
+	}
+
+	const icon = L.icon({
+		iconUrl: 'https://wiki.openstreetmap.org/w/images/d/d0/Open_note_marker.png',
+
+		iconSize:     [25, 40], // size of the icon
+		iconAnchor:   [12, 40], // point of the icon which will correspond to marker's location
+		popupAnchor:  [0, -20]  // point from which the popup should open relative to the iconAnchor
+	});
+	const circleIcon = {
+		"radius": 5,
+		"fillColor": "#fa6607",
+		"color": "#fa6607",
+		"weight": 1,
+		"opacity": 1
+	};
+	const style = {
+		"color": "#fa6607",
+		"weight": 5,
+		"opacity": 0.71
+	};
+	const highlightedStyle = {
+		"color": "purple",
+		"weight": 5,
+		"opacity": 0.71
+	};
+
+
+	mapMoved();
+	map.on("moveend", () => mapMoved());
+	map.on("autopanstart", () => autopanning = true)
+
+	function mapMoved() {
+		const showNotes = document.getElementById("showNotesCheckbox").checked;
+		const bbox = map.getBounds().toBBoxString();
+		if (showNotes)
+			performRestCall("https://www.openstreetmap.org/api/0.6/notes.json?closed=0&bbox=" + bbox, updateNotes);
+		performRestCall("http://localhost:8080/feature/?bbox=" + bbox + "&showNotes=" + showNotes, updateFeatures);
+		performRestCall("http://localhost:8080/featurecount/?bbox=" + bbox, updateFeatureCount);
+	}
+
+	function performRestCall(url, callback) {
+		const req = new XMLHttpRequest();
+
+		req.open("GET", url);
+		req.setRequestHeader("Access-Control-Allow-Origin", "*");
+		req.send();
+
+		req.onreadystatechange = () => {
+			if (req.readyState === 4 && req.status === 200) {
+				callback(req.responseText);
+			}
+		}
+	}
+
+	function updateFeatureCount(payload) {
+		const featureCount = JSON.parse(payload);
+		document.getElementById("featurecount").innerHTML = featureCount.numberOfFeaturesInBBox + " / " + featureCount.maxNumberOfFeaturesReturnedFromQuery;
+	}
+
+	function updateTags(tags) {
+		const tbl = document.createElement('table');
+		const tbdy = document.createElement('tbody');
+
+		tags.forEach(tag => {
+			const tr = document.createElement('tr');
+			if (tag.key.toLowerCase().startsWith("fixme") || tag.key.toLowerCase().startsWith("todo"))
+				tr.style.backgroundColor = "#f0d0b0";
+
+			const tdKey = document.createElement('td');
+			tdKey.appendChild(document.createTextNode(tag.key))
+			tr.appendChild(tdKey)
+
+			const tdValue = document.createElement('td');
+			tdValue.appendChild(document.createTextNode(tag.value))
+			tr.appendChild(tdValue)
+
+			tbdy.appendChild(tr);
+		});
+
+		tbl.appendChild(tbdy);
+		return tbl;
+    }
+
+	function updateNotes(payload) {
+		if (notesLayerGroup)
+			notesLayerGroup.clearLayers();
+		const returnedFeature = L.geoJSON(JSON.parse(payload), { onEachFeature: onEachNote, pointToLayer: (_, latlng) => { return L.marker(latlng, { icon: icon }) } });
+		notesLayerGroup = L.layerGroup([returnedFeature]);
+		notesLayerGroup.addTo(map);
+	}
+
+	function updateFeatures(payload) {
+		if (layerGroup)
+			layerGroup.clearLayers();
+		const returnedFeature = L.geoJSON(JSON.parse(payload), { onEachFeature: onEachFeature, style: style, pointToLayer: (_, latlng) => { return L.circleMarker(latlng, { icon: circleIcon }) } });
+		layerGroup = L.layerGroup([returnedFeature]);
+		layerGroup.addTo(map);
+
+		if (autopanning) {
+			map.openPopup(currentPopup);
+			autopanning = false;
+		}
+	}
+
+	function onEachNote(feature, layer) {
+		if (feature.properties) {
+			layer.bindPopup(() => createNotePopup(feature.properties));
+
+			layer.on("click", () => {
+				currentPopup = layer.getPopup();
+			});
+		}
+	}
+
+	function onEachFeature(feature, layer) {
+		if (feature.properties) {
+			layer.bindPopup(() => createPopup(feature.properties));
+
+			layer.on("click", e => {
+				currentPopup = layer.getPopup();
+
+				if (!(layer instanceof L.Marker))
+					layer.setStyle(highlightedStyle);
+				updatePopup(e);
+			});
+			layer.on('popupclose', () => {
+				if (!(layer instanceof L.Marker))
+					layer.setStyle(style);
+			});
+		}
+	}
+
+	async function createTags(id) {
+		let response = await fetch("http://localhost:8080/tags/?id=" + id);
+		let tags = await response.json();
+		return updateTags(tags);
+	}
+
+	function createNotePopup(properties) {
+		const id = properties.id;
+		const url = "https://www.openstreetmap.org/note/" + id;
+		const category = "Note";
+
+		const conversation = properties.comments.map(comment => {
+			const translate = "<a href=\"https://translate.google.com/#view=home&op=translate&sl=auto&tl=en&text=" + comment.text.replaceAll("\"", "'") + "\" target=\"_blank\">" +
+					"<img class=\"note_meta_translate_img\" alt=\"Translate\" title=\"Translate\" src=\"icon-translate.png\" /></a>"
+			let user = "Anonymous";
+			if (comment.user)
+				user = "<a href=\"" + comment.user_url + "\" target=\"_blank\">" + comment.user + "</a>"
+			return "<div class=\"speech-bubble\">" + comment.html + "<p class=\"note_meta\"><span class=\"note_meta_helper\"></span>" + translate + "<span class=\"note_action\">" + comment.action + "</span> by " + user + " at " + comment.date + "</p></div>"
+		}).join("");
+
+		const link = "<a href=\"" + url + "\" target=\"_blank\">ID: " + id + "</a>";
+		return "<div id=\"" + id + "\"><b>" + category + "</b> - " + link + "<br /><div class=\"popupcontentdiv\" id=\"notesdiv_" + id + "\">" + conversation + "</div></div>";
+	}
+
+	function createPopup(properties) {
+		const id = properties.entityId;
+		const url = properties.url;
+		const category = properties.category;
+
+		const link = "<a href=\"" + url + "\" target=\"_blank\">ID: " + id + "</a>";
+		return "<div id=\"" + id + "\"><b>" + category + "</b> - " + link + "<br /><b>Tags:</b><br /><div class=\"popupcontentdiv\" id=\"tagsdiv_" + id + "\"></div></div>";
+	}
+
+	function updatePopup(e) {
+		const popup = e.target.getPopup();
+		const id = popup._contentNode.childNodes[0].attributes[0].value;
+
+		function insertTable(tagsTable) {
+			const div = document.getElementById("tagsdiv_" + id);
+			div.innerHTML = "";
+			div.append(tagsTable);
+			const content = document.getElementById(id);
+			popup.setContent(content);
+		}
+		createTags(id).then(tags => insertTable(tags))
+	}
+</script>
+
+</body>
+</html>

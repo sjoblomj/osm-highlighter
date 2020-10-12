@@ -1,0 +1,19 @@
+version: '2'
+services:
+    postgisdb:
+        container_name: postgis
+        image: kartoza/postgis
+        volumes:
+            - postgisvolume:/var/lib/postgresql/data
+        environment:
+            - POSTGRES_PASSWORD=password
+            - POSTGRES_USER=jj
+            - POSTGRES_DBNAME=features
+            - PGDATA=/var/lib/postgresql/data/pgdata
+        ports:
+            - 54321:5432
+#        env_file:
+#            - 'database.yml'
+
+volumes:
+    postgisvolume: {}
