@@ -274,7 +274,7 @@
 
 		const conversation = properties.comments.map(comment => {
 			const translate = "<a href=\"https://translate.google.com/#view=home&op=translate&sl=auto&tl=en&text=" + comment.text.replaceAll("\"", "'") + "\" target=\"_blank\">" +
-					"<img class=\"note_meta_translate_img\" alt=\"Translate\" title=\"Translate\" src=\"icon-translate.png\" /></a>"
+					"<img class=\"note_meta_translate_img\" alt=\"Translate\" title=\"Translate note\" src=\"icon-translate.png\" /></a>"
 			let user = "Anonymous";
 			if (comment.user)
 				user = "<a href=\"" + comment.user_url + "\" target=\"_blank\">" + comment.user + "</a>"
