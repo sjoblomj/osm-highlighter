@@ -13,7 +13,7 @@
 	<artifactId>osmhighlighterdatagenerator</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>osmhighlighterdatagenerator</name>
-	<description>Generates data for osmhighlighter</description>
+	<description>Generates data for osm-highlighter</description>
 
 	<properties>
 		<java.version>11</java.version>
@@ -48,6 +48,11 @@
 			<groupId>org.hibernate</groupId>
 			<artifactId>hibernate-spatial</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
 
 
 		<dependency>
@@ -73,11 +78,6 @@
 		</dependency>
 
 
-		<dependency>
-			<groupId>org.postgresql</groupId>
-			<artifactId>postgresql</artifactId>
-			<scope>runtime</scope>
-		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>

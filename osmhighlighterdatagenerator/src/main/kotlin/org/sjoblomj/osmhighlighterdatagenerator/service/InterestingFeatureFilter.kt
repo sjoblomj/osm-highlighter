@@ -8,10 +8,6 @@ import de.topobyte.osm4j.core.model.iface.OsmWay
 import de.topobyte.osm4j.core.model.util.OsmModelUtil
 
 class InterestingFeatureFilter : DefaultOsmHandler() {
-	val nodeHighways = HashMap<String, Int>()
-	val wayHighways = HashMap<String, Int>()
-	val relationHighways = HashMap<String, Int>()
-
 	val todoNodes = HashSet<OsmNode>()
 	val todoWays = HashSet<OsmWay>()
 	val todoRelations = HashSet<OsmRelation>()
@@ -27,18 +23,18 @@ class InterestingFeatureFilter : DefaultOsmHandler() {
 
 
 	override fun handle(entity: OsmNode) {
-		handle(entity, todoNodes, namelessNodes, nodeHighways)
+		handle(entity, todoNodes, namelessNodes)
 	}
 
 	override fun handle(entity: OsmWay) {
-		handle(entity, todoWays, namelessWays, wayHighways)
+		handle(entity, todoWays, namelessWays)
 	}
 
 	override fun handle(entity: OsmRelation) {
-		handle(entity, todoRelations, namelessRelations, relationHighways)
+		handle(entity, todoRelations, namelessRelations)
 	}
 
-	private fun <T: OsmEntity> handle(entity: T, todoSet: HashSet<T>, namelessSet: HashSet<T>, highways: HashMap<String, Int>) {
+	private fun <T: OsmEntity> handle(entity: T, todoSet: HashSet<T>, namelessSet: HashSet<T>) {
 		val tags = OsmModelUtil.getTagsAsMap(entity)
 
 		if (tags["fixme"] != null || tags["todo"] != null)
@@ -46,15 +42,6 @@ class InterestingFeatureFilter : DefaultOsmHandler() {
 
 		if (lacksName(tags))
 			namelessSet.add(entity)
-
-
-		val highway = tags["highway"]
-		if (highway != null) {
-			if (highways[highway] != null)
-				highways[highway] = highways[highway]!! + 1
-			else
-				highways[highway] = 1
-		}
 	}
 }
 

@@ -19,13 +19,10 @@ class FeatureService(private val databaseRepository: DatabaseRepository, private
 	fun getFeature(@RequestParam bbox: String, @RequestParam showNotes: Boolean = false): String {
 
 		val boundingBox = bbox.split(",").map { it.toFloat() }
-//		databaseRepository.apa(boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3]).forEach { println(it) }
 		val features = databaseRepository.getFeatures(boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3])
 
 		println("Found ${features.size} features for $bbox")
-		val s = "[\n" + features.joinToString(",\n") { featureToJson(it) } + "\n]"
-//		println(s)
-		return s
+		return "[\n" + features.joinToString(",\n") { featureToJson(it) } + "\n]"
 	}
 
 	@GetMapping("/featurecount", produces = [APPLICATION_JSON_VALUE])
