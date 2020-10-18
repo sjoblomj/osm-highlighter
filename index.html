@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="height: 100%; width: 100%;">
 <head>
 
 	<title>osm-highlighter</title>
@@ -17,13 +17,88 @@
 		tr:nth-child(even) {
 			background-color: #FFF;
 		}
-
-		.overlayitems {
-			float: right;
+		.fixmeRow {
+			background-color: #f0d0b0 !important;
 		}
+
+		.map {
+			height: 100%;
+			width: 100%;
+		}
+
+		.mapcontrol {
+			right: 1ex;
+			top: 1ex;
+			float: right;
+			position: absolute;
+			z-index: 1024;
+
+			padding: 6px 6px 6px 6px;
+			color: #333;
+			box-shadow: 0 1px 5px rgba(0,0,0,0.4);
+			background: #fff;
+			border-radius: 5px;
+		}
+		.expanded-map-control {
+			display: none;
+			clear: both;
+		}
+
+		.menubars {
+			display: inline-block;
+			cursor: pointer;
+			float: right;
+			clear: both;
+		}
+
+		.bar1, .bar2, .bar3 {
+			width: 35px;
+			height: 5px;
+			background-color: #333;
+			margin: 6px 0;
+			transition: 0.4s;
+		}
+
+		.change .bar1 {
+			-webkit-transform: rotate(-45deg) translate(-9px, 6px);
+			transform: rotate(-45deg) translate(-9px, 6px);
+		}
+
+		.change .bar2 {opacity: 0;}
+
+		.change .bar3 {
+			-webkit-transform: rotate(45deg) translate(-8px, -8px);
+			transform: rotate(45deg) translate(-8px, -8px);
+		}
+
+
 		.formlabel {
 			display: inline !important;
 		}
+
+		h1 {
+			position: relative;
+			font-size: 1em;
+			z-index: 1;
+			overflow: hidden;
+			text-align: center;
+			color: #555;
+		}
+		h1:before, h1:after {
+			position: absolute;
+			top: 45%;
+			overflow: hidden;
+			width: 50%;
+			height: 1px;
+			content: '\a0';
+			background-color: lightgray;
+		}
+		h1:before {
+			margin-left: -50%;
+			text-align: right;
+		}
+
+
 
 		.popupcontentdiv {
 			overflow-x: hidden;
@@ -83,14 +158,26 @@
 		}
 	</style>
 </head>
-<body>
+<body style="margin: 0; padding: 0; height: 100%; width: 100%;">
 
-<div>
-	<label for="showNotesCheckbox" style="vertical-align: 1ex;">Show Notes from OSM</label><input style="vertical-align: 1ex;" type="checkbox" id="showNotesCheckbox" />
-	<label for="slide" style="vertical-align: 1ex;">Opacity:</label>&nbsp;<input id="slide" type="range" min="0" max="1" step="0.1" value="0.5" onchange="updateOpacity(this.value)" />
-	<div style="display:inline; vertical-align: 1ex;" id="featurecount"></div>
+<div class="mapcontrol">
+	<div class="menubars" onclick="toggleMenu(this)">
+		<div class="bar1"></div>
+		<div class="bar2"></div>
+		<div class="bar3"></div>
+	</div>
+
+	<div class="expanded-map-control" id="expanded-map-control">
+		<form>
+			<label for="slide" style="vertical-align: 1ex;">Opacity:</label>&nbsp;<input id="slide" type="range" min="0" max="1" step="0.1" value="0.5" onchange="updateOpacity(this.value)" />
+			<h1>&nbsp;Layers&nbsp;</h1>
+			<input class="leaflet-control-layers-overlays" id="showNotesCheckbox" onclick=toggleFunction(this.checked) type="checkbox" />
+			<label class=formlabel for="showNotesCheckbox">Show Notes</label><br />
+		</form>
+	</div>
 </div>
-<div id="mapid" style="width: 99vw; height: 98vh;"></div>
+
+<div id="mapid" class="map"></div>
 
 <script>
 	const map = L.map('mapid').setView([57.7000, 12.000], 13);
@@ -98,25 +185,6 @@
 	var notesLayerGroup;
 	var autopanning = false;
 	var currentPopup;
-
-	function toggleFunction(bool) {
-		alert(bool)
-	}
-	const command = L.control({position: 'topright'});
-	command.onAdd = () => {
-		const div = L.DomUtil.create('div');
-		div.innerHTML = `
-    <div class="leaflet-control-layers leaflet-control-layers-expanded overlayitems">
-      <form>
-        <input class="leaflet-control-layers-overlays" id="command" onclick=toggleFunction(this.checked) type="checkbox" />
-        <label class=formlabel for="command">Show Notes</label>
-        <label for="slidez" style="vertical-align: 1ex;">Opacity:</label>&nbsp;<input id="slidez" type="range" min="0" max="1" step="0.1" value="0.5" onchange="updateOpacity(this.value)" />
-      </form>
-    </div>`;
-		return div;
-	};
-	command.addTo(map); //your map variable
-
 
 
 	const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -194,11 +262,16 @@
 
 		tags.forEach(tag => {
 			const tr = document.createElement('tr');
-			if (tag.key.toLowerCase().startsWith("fixme") || tag.key.toLowerCase().startsWith("todo"))
-				tr.style.backgroundColor = "#f0d0b0";
+			const isFixme = tag.key.toLowerCase().startsWith("fixme") || tag.key.toLowerCase().startsWith("todo");
+			const isNote = tag.key.toLowerCase().startsWith("note") || tag.key.toLowerCase().startsWith("description");
+
+			if (isFixme)
+				tr.className += " fixmeRow";
 
 			const tdKey = document.createElement('td');
-			tdKey.appendChild(document.createTextNode(tag.key))
+			tdKey.appendChild(document.createTextNode(tag.key));
+			if (isFixme || isNote)
+				tdKey.appendChild(createGoogleTranslateLink(tag.value));
 			tr.appendChild(tdKey)
 
 			const tdValue = document.createElement('td');
@@ -273,8 +346,7 @@
 		const category = "Note";
 
 		const conversation = properties.comments.map(comment => {
-			const translate = "<a href=\"https://translate.google.com/#view=home&op=translate&sl=auto&tl=en&text=" + comment.text.replaceAll("\"", "'") + "\" target=\"_blank\">" +
-					"<img class=\"note_meta_translate_img\" alt=\"Translate\" title=\"Translate note\" src=\"icon-translate.png\" /></a>"
+			const translate = createGoogleTranslateLink(comment.text).outerHTML;
 			let user = "Anonymous";
 			if (comment.user)
 				user = "<a href=\"" + comment.user_url + "\" target=\"_blank\">" + comment.user + "</a>"
@@ -283,6 +355,20 @@
 
 		const link = "<a href=\"" + url + "\" target=\"_blank\">ID: " + id + "</a>";
 		return "<div id=\"" + id + "\"><b>" + category + "</b> - " + link + "<br /><div class=\"popupcontentdiv\" id=\"notesdiv_" + id + "\">" + conversation + "</div></div>";
+	}
+
+	function createGoogleTranslateLink(text) {
+		const a = document.createElement('a');
+		const img = document.createElement('img');
+		img.src = "icon-translate.png";
+		img.alt = "Translate";
+		img.title = "Translate";
+		img.className += " note_meta_translate_img";
+		a.appendChild(img);
+		a.title = "Translate";
+		a.target = "_blank";
+		a.href = "https://translate.google.com/#view=home&op=translate&sl=auto&tl=en&text=" + text.replaceAll("\"", "'");
+		return a;
 	}
 
 	function createPopup(properties) {
@@ -306,6 +392,15 @@
 			popup.setContent(content);
 		}
 		createTags(id).then(tags => insertTable(tags))
+	}
+
+	function toggleMenu(menu) {
+		menu.classList.toggle("change");
+		const expandedControl = document.getElementById("expanded-map-control");
+		if (expandedControl.style.display === "block")
+			expandedControl.style.display = "none";
+		else
+			expandedControl.style.display = "block";
 	}
 </script>
 
