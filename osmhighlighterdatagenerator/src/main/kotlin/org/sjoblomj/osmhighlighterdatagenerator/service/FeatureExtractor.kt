@@ -9,9 +9,9 @@ import de.topobyte.osm4j.core.model.iface.OsmWay
 import de.topobyte.osm4j.core.resolve.OsmEntityProvider
 import org.slf4j.LoggerFactory
 
-class FeatureExtractor(interestingNodes: List<OsmNode>,
-											 interestingWays: List<OsmWay>,
-											 interestingRelations: List<OsmRelation>) : DefaultOsmHandler(), OsmEntityProvider {
+class FeatureExtractor(interestingNodes: Collection<OsmNode>,
+											 interestingWays: Collection<OsmWay>,
+											 interestingRelations: Collection<OsmRelation>) : DefaultOsmHandler(), OsmEntityProvider {
 
 	private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -85,7 +85,7 @@ class FeatureExtractor(interestingNodes: List<OsmNode>,
 	}
 
 
-	private fun getIdsFromRelationOfType(relations: List<OsmRelation>, entityType: EntityType) =
+	private fun getIdsFromRelationOfType(relations: Collection<OsmRelation>, entityType: EntityType) =
 		relations.flatMap { getIdsOfType(it, entityType) }.toHashSet()
 
 	private fun getIdsOfType(relation: OsmRelation, entityType: EntityType) =

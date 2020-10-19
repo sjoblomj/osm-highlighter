@@ -47,7 +47,7 @@ class FeatureService(private val databaseRepository: DatabaseRepository, private
 
 
 	fun featureToJson(geoEntity: GeoEntity): String {
-		fun createGeoJson(entityType: String) = "{${createProperties(geoEntity.id, entityType, geoEntity.category)}, ${geoEntity.geom.substring(1)}"
+		fun createGeoJson(entityType: String) = "{${createProperties(geoEntity.id, entityType, "geoEntity.category")}, ${geoEntity.geom.substring(1)}"
 
 		return when {
 			geoEntity.geom.startsWith("{\"type\":\"Point\"") -> createGeoJson("node")

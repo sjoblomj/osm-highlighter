@@ -8,42 +8,55 @@ import de.topobyte.osm4j.core.model.iface.OsmWay
 import de.topobyte.osm4j.core.model.util.OsmModelUtil
 
 class InterestingFeatureFilter : DefaultOsmHandler() {
-	val todoNodes = HashSet<OsmNode>()
-	val todoWays = HashSet<OsmWay>()
-	val todoRelations = HashSet<OsmRelation>()
+	private val fixme = "fixme"
+	private val nameless = "nameless"
 
-	val namelessNodes = HashSet<OsmNode>()
-	val namelessWays = HashSet<OsmWay>()
-	val namelessRelations = HashSet<OsmRelation>()
+	val categories = listOf(fixme, nameless)
+
+	val nodes = mutableMapOf<OsmNode, Set<Category>>()
+	val ways = mutableMapOf<OsmWay, Set<Category>>()
+	val relations = mutableMapOf<OsmRelation, Set<Category>>()
 
 
-	fun getNodes() = listOf(todoNodes, namelessNodes).flatten()
-	fun getWays() = listOf(todoWays, namelessWays).flatten()
-	fun getRelations() = listOf(todoRelations, namelessRelations).flatten()
+	fun getNodes() = nodes.keys
+	fun getWays() = ways.keys
+	fun getRelations() = relations.keys
+	fun getNodes(category: Category) = nodes.filterValues { it.contains(category) }.keys
+	fun getWays(category: Category) = ways.filterValues { it.contains(category) }.keys
+	fun getRelations(category: Category) = relations.filterValues { it.contains(category) }.keys
+
 
 
 	override fun handle(entity: OsmNode) {
-		handle(entity, todoNodes, namelessNodes)
+		handle(entity, nodes)
 	}
 
 	override fun handle(entity: OsmWay) {
-		handle(entity, todoWays, namelessWays)
+		handle(entity, ways)
 	}
 
 	override fun handle(entity: OsmRelation) {
-		handle(entity, todoRelations, namelessRelations)
+		handle(entity, relations)
 	}
 
-	private fun <T: OsmEntity> handle(entity: T, todoSet: HashSet<T>, namelessSet: HashSet<T>) {
+	private fun <T: OsmEntity> handle(entity: T, features: MutableMap<T, Set<Category>>) {
 		val tags = OsmModelUtil.getTagsAsMap(entity)
 
-		if (tags["fixme"] != null || tags["todo"] != null)
-			todoSet.add(entity)
+		if (isFixme(tags))
+			features.addEntityWithTag(entity, fixme)
 
 		if (lacksName(tags))
-			namelessSet.add(entity)
+			features.addEntityWithTag(entity, nameless)
 	}
 }
+
+private fun <T: OsmEntity> MutableMap<T, Set<Category>>.addEntityWithTag(entity: T, tag: Category) {
+	if (this.containsKey(entity))
+		this[entity] = this[entity]!!.plus(tag)
+	else
+		this[entity] = setOf(tag)
+}
+
 
 private val allowedHighwayValues = listOf(
 	"service",
@@ -81,12 +94,20 @@ private val allowedHighwayValues = listOf(
 )
 
 private fun Map<String, String>.containsKeyValue(key: String, value: String) = this.containsKey(key) && this.containsValue(value)
-private fun Map<String, String>.hasAllowedValueForKey(key: String, allowedValues: List<String>) =
+private fun Map<String, String>.hasAllowedValueForKey(key: String, allowedValues: Collection<String>) =
 	this.containsKey(key) && allowedValues.contains(this[key])
 
-fun lacksName(tags: Map<String, String>) =
+private fun isFixme(tags: MutableMap<String, String>) =
+	tags.keys.any {
+		val key = it.toLowerCase()
+		key.startsWith("fixme") || key.startsWith("todo")
+	}
+
+private fun lacksName(tags: Map<String, String>) =
 	tags.containsKey("highway") &&
 		!tags.containsKey("ref") &&
 		!tags.containsKey("name") &&
 		!tags.containsKeyValue("junction", "roundabout") &&
 		!tags.hasAllowedValueForKey("highway", allowedHighwayValues)
+
+typealias Category = String

@@ -7,20 +7,24 @@ import de.topobyte.osm4j.geometry.GeometryBuilder
 import de.topobyte.osm4j.geometry.MissingEntitiesStrategy
 import de.topobyte.osm4j.geometry.MissingWayNodeStrategy
 import de.topobyte.osm4j.pbf.seq.PbfReader
-import org.sjoblomj.osmhighlighterdatagenerator.db.DatabaseRepository
+import org.sjoblomj.osmhighlighterdatagenerator.db.CategoryRepository
+import org.sjoblomj.osmhighlighterdatagenerator.db.GeometryRepository
 import org.sjoblomj.osmhighlighterdatagenerator.db.TagRepository
+import org.sjoblomj.osmhighlighterdatagenerator.dto.CategoryEntity
 import org.sjoblomj.osmhighlighterdatagenerator.dto.GeoEntity
 import org.sjoblomj.osmhighlighterdatagenerator.dto.Tag
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.io.FileInputStream
-import java.util.*
 import kotlin.system.measureTimeMillis
+import kotlin.time.ExperimentalTime
+import kotlin.time.measureTimedValue
 
 @Service
-class GeneratorService(private val geoRepo: DatabaseRepository, private val tagRepo: TagRepository) {
+class GeneratorService(private val geoRepo: GeometryRepository, private val tagRepo: TagRepository, private val categoryRepository: CategoryRepository) {
 	private val logger = LoggerFactory.getLogger(javaClass)
 
+	@ExperimentalTime
 	fun consumeFile(filename: String) {
 		logger.info("Starting to consume $filename")
 
@@ -30,10 +34,11 @@ class GeneratorService(private val geoRepo: DatabaseRepository, private val tagR
 		}
 		logger.info("Consumed in $timetaken ms")
 
+		val categories = saveCategoriesToDatabase(interestingFeatures)
 		saveTagsToDatabase(interestingFeatures)
 
 		val featureExtractor = FeatureExtractor(interestingFeatures.getNodes(), interestingFeatures.getWays(), interestingFeatures.getRelations())
-		for (i in 0..10) {
+		for (i in 0..1) {
 			logger.info("Iteration $i at finding interesting features")
 			readPbfFileWithHandler(filename, featureExtractor)
 			if (featureExtractor.hasUpdated())
@@ -48,35 +53,42 @@ class GeneratorService(private val geoRepo: DatabaseRepository, private val tagR
 			it.missingEntitiesStrategy = MissingEntitiesStrategy.BUILD_PARTIAL
 		}
 
-		fun createGeoEntities(entities: Set<OsmEntity>, category: String) = entities
-			.map { it.id to buildGeometry(it, geometryBuilder, featureExtractor) }
+		fun <T: OsmEntity> createGeoEntities(entities: Map<T, Set<Category>>) = entities
+			.map { (entity, categorySet) -> Triple(entity.id, buildGeometry(entity, geometryBuilder, featureExtractor), categorySet) }
 			.filter { it.second != null }
-			.map { GeoEntity(it.first, it.second!!, category)}
+			.map { GeoEntity(it.first, it.second!!, it.third.map { category -> categories.first { categoryEntry -> categoryEntry.name == category }.categoryid })}
 
 		logger.info("Saving GeoEntities to database")
 		val dbTimeTaken = measureTimeMillis {
-			geoRepo.saveAll(createGeoEntities(interestingFeatures.todoNodes, "todo"))
-			geoRepo.saveAll(createGeoEntities(interestingFeatures.todoWays, "todo"))
-			geoRepo.saveAll(createGeoEntities(relationsFilter(interestingFeatures.todoRelations), "todo"))
-			geoRepo.saveAll(createGeoEntities(interestingFeatures.namelessNodes, "nameless"))
-			geoRepo.saveAll(createGeoEntities(interestingFeatures.namelessWays, "nameless"))
-			geoRepo.saveAll(createGeoEntities(relationsFilter(interestingFeatures.namelessRelations), "nameless"))
+			geoRepo.saveAll(createGeoEntities(interestingFeatures.nodes))
+			geoRepo.saveAll(createGeoEntities(interestingFeatures.ways))
+			geoRepo.saveAll(createGeoEntities(relationsFilter(interestingFeatures.relations)))
 		}
 		logger.info("Took $dbTimeTaken ms to save GeoEntities to database.")
 	}
 
-	private fun relationsFilter(relations: HashSet<OsmRelation>): Set<OsmRelation> {
-		return relations.filter { relation ->
+	private fun relationsFilter(relations: Map<OsmRelation, Set<Category>>): Map<OsmRelation, Set<Category>> {
+		return relations.filter { (relation, _) ->
 			(0 until relation.numberOfMembers)
 				.map { relation.getMember(it) }
 				.none { it.type == EntityType.Relation }
-		}.toSet()
+		}
 	}
 
+	@ExperimentalTime
+	private fun saveCategoriesToDatabase(interestingFeatures: InterestingFeatureFilter): List<CategoryEntity> {
+		val (categories, timeTaken) = measureTimedValue {
+			interestingFeatures.categories.map {
+				categoryRepository.save(CategoryEntity(0, it))
+			}
+		}
+		logger.info("Saved categories to database in $timeTaken ms")
+		return categories
+	}
 
 	private fun saveTagsToDatabase(interestingFeatures: InterestingFeatureFilter) {
-		fun saveTags(list: List<OsmEntity>) {
-			val tags = list.flatMap { entity ->
+		fun saveTags(entities: Collection<OsmEntity>) {
+			val tags = entities.flatMap { entity ->
 				val tags = OsmModelUtil.getTagsAsMap(entity)
 				tags.map { tag -> Tag(entity.id, tag.key, tag.value) }
 			}

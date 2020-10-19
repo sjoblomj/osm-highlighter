@@ -4,7 +4,7 @@ import org.locationtech.jts.geom.Geometry
 import javax.persistence.*
 
 @Entity
-@Table(name = "bepa")
+@Table(name = "geoentries")
 data class GeoEntity(
 	@Id
 	val id: Long,
@@ -12,6 +12,7 @@ data class GeoEntity(
 	@Column(nullable = false)
 	val geom: Geometry,
 
-	@Column(nullable = false)
-	val category: String
+	@Column
+	@ElementCollection
+	val category: Collection<Int>
 )
