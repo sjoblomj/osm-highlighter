@@ -7,10 +7,13 @@ import de.topobyte.osm4j.core.model.iface.OsmNode
 import de.topobyte.osm4j.core.model.iface.OsmRelation
 import de.topobyte.osm4j.core.model.iface.OsmWay
 import de.topobyte.osm4j.core.resolve.OsmEntityProvider
+import org.slf4j.LoggerFactory
 
 class FeatureExtractor(interestingNodes: List<OsmNode>,
 											 interestingWays: List<OsmWay>,
 											 interestingRelations: List<OsmRelation>) : DefaultOsmHandler(), OsmEntityProvider {
+
+	private val logger = LoggerFactory.getLogger(javaClass)
 
 	private var hasUpdated = false
 
@@ -77,7 +80,7 @@ class FeatureExtractor(interestingNodes: List<OsmNode>,
 	private fun <T> getEntity(id: Long, map: Map<Long, T>, type: String): T? {
 		val entity = map[id]
 		if (entity == null)
-			println("Found no $type with id $id")
+			logger.warn("Found no $type with id $id")
 		return entity
 	}
 

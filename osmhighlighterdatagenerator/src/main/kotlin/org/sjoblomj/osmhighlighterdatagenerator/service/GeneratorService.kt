@@ -7,39 +7,42 @@ import de.topobyte.osm4j.geometry.GeometryBuilder
 import de.topobyte.osm4j.geometry.MissingEntitiesStrategy
 import de.topobyte.osm4j.geometry.MissingWayNodeStrategy
 import de.topobyte.osm4j.pbf.seq.PbfReader
-import org.sjoblomj.osmhighlighterdatagenerator.OsmhighlighterdatageneratorApplication
 import org.sjoblomj.osmhighlighterdatagenerator.db.DatabaseRepository
 import org.sjoblomj.osmhighlighterdatagenerator.db.TagRepository
 import org.sjoblomj.osmhighlighterdatagenerator.dto.GeoEntity
 import org.sjoblomj.osmhighlighterdatagenerator.dto.Tag
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
-import java.io.File
 import java.io.FileInputStream
-import java.util.HashSet
+import java.util.*
 import kotlin.system.measureTimeMillis
 
 @Service
 class GeneratorService(private val geoRepo: DatabaseRepository, private val tagRepo: TagRepository) {
+	private val logger = LoggerFactory.getLogger(javaClass)
 
 	fun consumeFile(filename: String) {
-
-		val file = File(OsmhighlighterdatageneratorApplication::class.java.getResource(filename).toURI())
+		logger.info("Starting to consume $filename")
 
 		val interestingFeatures = InterestingFeatureFilter()
-		readPbfFileWithHandler(file, interestingFeatures)
+		val timetaken = measureTimeMillis {
+			readPbfFileWithHandler(filename, interestingFeatures)
+		}
+		logger.info("Consumed in $timetaken ms")
 
 		saveTagsToDatabase(interestingFeatures)
 
 		val featureExtractor = FeatureExtractor(interestingFeatures.getNodes(), interestingFeatures.getWays(), interestingFeatures.getRelations())
 		for (i in 0..10) {
-			println("Iteration $i at finding interesting features")
-			readPbfFileWithHandler(file, featureExtractor)
+			logger.info("Iteration $i at finding interesting features")
+			readPbfFileWithHandler(filename, featureExtractor)
 			if (featureExtractor.hasUpdated())
 				featureExtractor.resetUpdateStatus()
 			else
 				break
 		}
 
+		logger.info("Finished finding interesting features; creating GeoEntities")
 		val geometryBuilder = GeometryBuilder().also {
 			it.missingWayNodeStrategy = MissingWayNodeStrategy.OMIT_VERTEX_FROM_POLYLINE
 			it.missingEntitiesStrategy = MissingEntitiesStrategy.BUILD_PARTIAL
@@ -50,12 +53,16 @@ class GeneratorService(private val geoRepo: DatabaseRepository, private val tagR
 			.filter { it.second != null }
 			.map { GeoEntity(it.first, it.second!!, category)}
 
-		geoRepo.saveAll(createGeoEntities(interestingFeatures.todoNodes, "todo"))
-		geoRepo.saveAll(createGeoEntities(interestingFeatures.todoWays, "todo"))
-		geoRepo.saveAll(createGeoEntities(relationsFilter(interestingFeatures.todoRelations), "todo"))
-		geoRepo.saveAll(createGeoEntities(interestingFeatures.namelessNodes, "nameless"))
-		geoRepo.saveAll(createGeoEntities(interestingFeatures.namelessWays, "nameless"))
-		geoRepo.saveAll(createGeoEntities(relationsFilter(interestingFeatures.namelessRelations), "nameless"))
+		logger.info("Saving GeoEntities to database")
+		val dbTimeTaken = measureTimeMillis {
+			geoRepo.saveAll(createGeoEntities(interestingFeatures.todoNodes, "todo"))
+			geoRepo.saveAll(createGeoEntities(interestingFeatures.todoWays, "todo"))
+			geoRepo.saveAll(createGeoEntities(relationsFilter(interestingFeatures.todoRelations), "todo"))
+			geoRepo.saveAll(createGeoEntities(interestingFeatures.namelessNodes, "nameless"))
+			geoRepo.saveAll(createGeoEntities(interestingFeatures.namelessWays, "nameless"))
+			geoRepo.saveAll(createGeoEntities(relationsFilter(interestingFeatures.namelessRelations), "nameless"))
+		}
+		logger.info("Took $dbTimeTaken ms to save GeoEntities to database.")
 	}
 
 	private fun relationsFilter(relations: HashSet<OsmRelation>): Set<OsmRelation> {
@@ -76,12 +83,13 @@ class GeneratorService(private val geoRepo: DatabaseRepository, private val tagR
 			tagRepo.saveAll(tags)
 		}
 
+		logger.info("About to save tags to database")
 		val timeTaken = measureTimeMillis {
 			saveTags(interestingFeatures.getNodes())
 			saveTags(interestingFeatures.getWays())
 			saveTags(interestingFeatures.getRelations())
 		}
-		println("Saved tags in $timeTaken ms")
+		logger.info("Saved tags in $timeTaken ms")
 	}
 
 
@@ -97,7 +105,7 @@ class GeneratorService(private val geoRepo: DatabaseRepository, private val tagR
 		try {
 			geometryBuilder.build(entity)
 		} catch (e: Exception) {
-			println("Exception for node ${entity.id}: $e")
+			logger.error("Exception for node ${entity.id}: $e")
 			null
 		}
 
@@ -105,7 +113,7 @@ class GeneratorService(private val geoRepo: DatabaseRepository, private val tagR
 		try {
 			geometryBuilder.build(entity, featureExtractor)
 		} catch (e: Exception) {
-			println("Exception for way ${entity.id}: $e")
+			logger.error("Exception for way ${entity.id}: $e")
 			null
 		}
 
@@ -113,11 +121,11 @@ class GeneratorService(private val geoRepo: DatabaseRepository, private val tagR
 		try {
 			geometryBuilder.build(entity, featureExtractor)
 		} catch (e: Exception) {
-			println("Exception for relation ${entity.id}: $e")
+			logger.error("Exception for relation ${entity.id}: $e")
 			null
 		}
 
-	private fun readPbfFileWithHandler(file: File, handler: OsmHandler) {
+	private fun readPbfFileWithHandler(file: String, handler: OsmHandler) {
 		FileInputStream(file).use {
 			val reader = PbfReader(it, false)
 			reader.setHandler(handler)
