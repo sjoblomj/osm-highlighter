@@ -8,10 +8,11 @@ import de.topobyte.osm4j.core.model.iface.OsmWay
 import de.topobyte.osm4j.core.model.util.OsmModelUtil
 
 class InterestingFeatureFilter : DefaultOsmHandler() {
-	private val fixme = "fixme"
-	private val nameless = "nameless"
+	private val fixme = "Fixme"
+	private val nameless = "Nameless"
+	private val unknownHighwayValues = "Unknown highway values"
 
-	val categories = listOf(fixme, nameless)
+	val categories = listOf(fixme, nameless, unknownHighwayValues)
 
 	val nodes = mutableMapOf<OsmNode, Set<Category>>()
 	val ways = mutableMapOf<OsmWay, Set<Category>>()
@@ -21,10 +22,6 @@ class InterestingFeatureFilter : DefaultOsmHandler() {
 	fun getNodes() = nodes.keys
 	fun getWays() = ways.keys
 	fun getRelations() = relations.keys
-	fun getNodes(category: Category) = nodes.filterValues { it.contains(category) }.keys
-	fun getWays(category: Category) = ways.filterValues { it.contains(category) }.keys
-	fun getRelations(category: Category) = relations.filterValues { it.contains(category) }.keys
-
 
 
 	override fun handle(entity: OsmNode) {
@@ -47,6 +44,9 @@ class InterestingFeatureFilter : DefaultOsmHandler() {
 
 		if (lacksName(tags))
 			features.addEntityWithTag(entity, nameless)
+
+		if (hasUnknownHighwayValue(tags))
+			features.addEntityWithTag(entity, unknownHighwayValues)
 	}
 }
 
@@ -58,7 +58,7 @@ private fun <T: OsmEntity> MutableMap<T, Set<Category>>.addEntityWithTag(entity:
 }
 
 
-private val allowedHighwayValues = listOf(
+private val highwayValuesThatDontNeedNames = listOf(
 	"service",
 	"track",
 	"path",
@@ -93,6 +93,23 @@ private val allowedHighwayValues = listOf(
 	"milestone"
 )
 
+private val highwayValuesThatNeedNames = listOf(
+	"residential",
+	"unclassified",
+	"tertiary",
+	"bus_stop",
+	"secondary",
+	"platform",
+	"trunk",
+	"primary",
+	"living_street",
+	"motorway",
+	"pedestrian",
+	"motorway_junction",
+	"raceway"
+)
+
+
 private fun Map<String, String>.containsKeyValue(key: String, value: String) = this.containsKey(key) && this.containsValue(value)
 private fun Map<String, String>.hasAllowedValueForKey(key: String, allowedValues: Collection<String>) =
 	this.containsKey(key) && allowedValues.contains(this[key])
@@ -108,6 +125,10 @@ private fun lacksName(tags: Map<String, String>) =
 		!tags.containsKey("ref") &&
 		!tags.containsKey("name") &&
 		!tags.containsKeyValue("junction", "roundabout") &&
-		!tags.hasAllowedValueForKey("highway", allowedHighwayValues)
+		!tags.hasAllowedValueForKey("highway", highwayValuesThatDontNeedNames)
+
+private fun hasUnknownHighwayValue(tags: Map<String, String>) =
+	tags.containsKey("highway") && !highwayValuesThatDontNeedNames.contains(tags["highway"]) && !highwayValuesThatNeedNames.contains(tags["highway"])
+
 
 typealias Category = String
