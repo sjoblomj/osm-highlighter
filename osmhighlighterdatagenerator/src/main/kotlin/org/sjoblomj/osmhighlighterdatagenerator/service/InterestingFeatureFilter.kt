@@ -90,7 +90,8 @@ private val highwayValuesThatDontNeedNames = listOf(
 	"passing_place",
 	"mini_roundabout",
 	"emergency_bay",
-	"milestone"
+	"milestone",
+	"toll_gantry"
 )
 
 private val highwayValuesThatNeedNames = listOf(
