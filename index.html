@@ -44,6 +44,7 @@
 			clear: both;
 		}
 
+		/* https://www.w3schools.com/howto/howto_css_menu_icon.asp */
 		.menubars {
 			display: inline-block;
 			cursor: pointer;
@@ -72,33 +73,10 @@
 		}
 
 
-		.formlabel {
-			display: inline !important;
+		fieldset {
+			border: 1px solid lightgray;
+			border-radius: 5px;
 		}
-
-		h1 {
-			position: relative;
-			font-size: 1em;
-			z-index: 1;
-			overflow: hidden;
-			text-align: center;
-			color: #555;
-		}
-		h1:before, h1:after {
-			position: absolute;
-			top: 45%;
-			overflow: hidden;
-			width: 50%;
-			height: 1px;
-			content: '\a0';
-			background-color: lightgray;
-		}
-		h1:before {
-			margin-left: -50%;
-			text-align: right;
-		}
-
-
 
 		.popupcontentdiv {
 			overflow-x: hidden;
@@ -170,9 +148,15 @@
 	<div class="expanded-map-control" id="expanded-map-control">
 		<form>
 			<label for="slide" style="vertical-align: 1ex;">Opacity:</label>&nbsp;<input id="slide" type="range" min="0" max="1" step="0.1" value="0.5" onchange="updateOpacity(this.value)" />
-			<h1>&nbsp;Layers&nbsp;</h1>
-			<input class="leaflet-control-layers-overlays" id="showNotesCheckbox" onclick=toggleFunction(this.checked) type="checkbox" />
-			<label class=formlabel for="showNotesCheckbox">Show Notes</label><br />
+			<fieldset>
+				<legend>Layers</legend>
+				<div id="layersdiv">
+					<div id="layersdiv_notes">
+						<input class="leaflet-control-layers-overlays" id="showNotesCheckbox" onclick=toggleFunction(this.checked) type="checkbox" />
+						<label class=formlabel for="showNotesCheckbox">Show Notes</label><br />
+					</div>
+				</div>
+			</fieldset>
 		</form>
 	</div>
 </div>
