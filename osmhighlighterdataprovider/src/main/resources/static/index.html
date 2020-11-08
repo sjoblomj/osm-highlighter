@@ -217,8 +217,8 @@
 		const bbox = map.getBounds().toBBoxString();
 		if (showNotes)
 			performRestCall("https://www.openstreetmap.org/api/0.6/notes.json?closed=0&bbox=" + bbox, updateNotes);
-		performRestCall("http://localhost:8080/feature/?bbox=" + bbox + "&showNotes=" + showNotes, updateFeatures);
-		performRestCall("http://localhost:8080/featurecount/?bbox=" + bbox, updateFeatureCount);
+		performRestCall("/feature/?bbox=" + bbox + "&showNotes=" + showNotes, updateFeatures);
+		performRestCall("/featurecount/?bbox=" + bbox, updateFeatureCount);
 	}
 
 	function performRestCall(url, callback) {
@@ -319,7 +319,7 @@
 	}
 
 	async function createTags(id) {
-		let response = await fetch("http://localhost:8080/tags/?id=" + id);
+		let response = await fetch("/tags/?id=" + id);
 		let tags = await response.json();
 		return updateTags(tags);
 	}
