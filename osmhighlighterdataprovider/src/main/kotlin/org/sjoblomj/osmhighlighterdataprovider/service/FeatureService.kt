@@ -1,7 +1,9 @@
 package org.sjoblomj.osmhighlighterdataprovider.service
 
+import org.sjoblomj.osmhighlighterdataprovider.db.CategoryRepository
 import org.sjoblomj.osmhighlighterdataprovider.db.DatabaseRepository
 import org.sjoblomj.osmhighlighterdataprovider.db.TagRepository
+import org.sjoblomj.osmhighlighterdataprovider.dtos.CategoryEntity
 import org.sjoblomj.osmhighlighterdataprovider.dtos.FeatureCount
 import org.sjoblomj.osmhighlighterdataprovider.dtos.GeoEntity
 import org.sjoblomj.osmhighlighterdataprovider.dtos.Tag
@@ -13,10 +15,15 @@ import org.springframework.web.bind.annotation.RestController
 
 @CrossOrigin
 @RestController
-class FeatureService(private val databaseRepository: DatabaseRepository, private val tagRepository: TagRepository) {
+class FeatureService(private val databaseRepository: DatabaseRepository,
+										 private val tagRepository: TagRepository,
+										 categoryRepository: CategoryRepository) {
+
+	private val dbCategories: List<CategoryEntity> = categoryRepository.findAll()
+
 
 	@GetMapping("/feature", produces = [APPLICATION_JSON_VALUE])
-	fun getFeature(@RequestParam bbox: String, @RequestParam showNotes: Boolean = false): String {
+	fun getFeatures(@RequestParam bbox: String, @RequestParam showNotes: Boolean = false): String {
 
 		val boundingBox = bbox.split(",").map { it.toFloat() }
 		val features = databaseRepository.getFeatures(boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3])
@@ -47,7 +54,7 @@ class FeatureService(private val databaseRepository: DatabaseRepository, private
 
 
 	fun featureToJson(geoEntity: GeoEntity): String {
-		fun createGeoJson(entityType: String) = "{${createProperties(geoEntity.id, entityType, "geoEntity.category")}, ${geoEntity.geom.substring(1)}"
+		fun createGeoJson(entityType: String) = "{${createProperties(geoEntity.id, entityType, geoEntity.category)}, ${geoEntity.geom.substring(1)}"
 
 		return when {
 			geoEntity.geom.startsWith("{\"type\":\"Point\"") -> createGeoJson("node")
@@ -56,8 +63,9 @@ class FeatureService(private val databaseRepository: DatabaseRepository, private
 		}
 	}
 
-	private fun createProperties(id: Long, entityType: String, category: String): String {
+	private fun createProperties(id: Long, entityType: String, categories: Collection<Int>): String {
+		val cats = categories.mapNotNull { catId -> dbCategories.find { it.categoryid == catId }?.name }.map { "\"$it\"" }
 		val url = "https://www.openstreetmap.org/$entityType/$id"
-		return "\"properties\": {\"entityId\": \"$id\", \"url\": \"$url\", \"category\":\"$category\"}"
+		return "\"properties\": {\"entityId\": \"$id\", \"url\": \"$url\", \"category\":[$cats]}"
 	}
 }

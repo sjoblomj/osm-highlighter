@@ -10,5 +10,9 @@ data class GeoEntity(
 	val id: Long,
 
 	@Column(nullable = false)
-	val geom: String
+	val geom: String,
+
+	@Column
+	@ElementCollection
+	val category: Collection<Int>
 )
