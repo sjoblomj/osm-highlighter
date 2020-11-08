@@ -39,14 +39,13 @@ class InterestingFeatureFilter : DefaultOsmHandler() {
 	private fun <T: OsmEntity> handle(entity: T, features: MutableMap<T, Set<Category>>) {
 		val tags = OsmModelUtil.getTagsAsMap(entity)
 
-		if (isFixme(tags))
-			features.addEntityWithTag(entity, fixme)
-
-		if (lacksName(tags))
-			features.addEntityWithTag(entity, nameless)
-
 		if (hasUnknownHighwayValue(tags))
 			features.addEntityWithTag(entity, unknownHighwayValues)
+		else if (lacksName(tags))
+			features.addEntityWithTag(entity, nameless)
+
+		if (isFixme(tags))
+			features.addEntityWithTag(entity, fixme)
 	}
 }
 
