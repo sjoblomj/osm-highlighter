@@ -1,13 +1,17 @@
 package org.sjoblomj.osmhighlighterdatagenerator.service
 
 import de.topobyte.osm4j.core.access.OsmHandler
-import de.topobyte.osm4j.core.model.iface.*
+import de.topobyte.osm4j.core.model.iface.OsmEntity
+import de.topobyte.osm4j.core.model.iface.OsmNode
+import de.topobyte.osm4j.core.model.iface.OsmRelation
+import de.topobyte.osm4j.core.model.iface.OsmWay
 import de.topobyte.osm4j.core.model.util.OsmModelUtil
 import de.topobyte.osm4j.geometry.GeometryBuilder
 import de.topobyte.osm4j.geometry.MissingEntitiesStrategy
 import de.topobyte.osm4j.geometry.MissingWayNodeStrategy
 import de.topobyte.osm4j.pbf.seq.PbfReader
 import org.sjoblomj.osmhighlighterdatagenerator.db.CategoryRepository
+import org.sjoblomj.osmhighlighterdatagenerator.db.GeomHomogenizerRepository
 import org.sjoblomj.osmhighlighterdatagenerator.db.GeometryRepository
 import org.sjoblomj.osmhighlighterdatagenerator.db.TagRepository
 import org.sjoblomj.osmhighlighterdatagenerator.dto.CategoryEntity
@@ -21,7 +25,10 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.measureTimedValue
 
 @Service
-class GeneratorService(private val geoRepo: GeometryRepository, private val tagRepo: TagRepository, private val categoryRepository: CategoryRepository) {
+class GeneratorService(private val geoRepo: GeometryRepository,
+											 private val geomHomogenizerRepository: GeomHomogenizerRepository,
+											 private val tagRepo: TagRepository,
+											 private val categoryRepository: CategoryRepository) {
 	private val logger = LoggerFactory.getLogger(javaClass)
 
 	@ExperimentalTime
@@ -38,7 +45,7 @@ class GeneratorService(private val geoRepo: GeometryRepository, private val tagR
 		saveTagsToDatabase(interestingFeatures)
 
 		val featureExtractor = FeatureExtractor(interestingFeatures.getNodes(), interestingFeatures.getWays(), interestingFeatures.getRelations())
-		for (i in 0..1) {
+		for (i in 0..10) {
 			logger.info("Iteration $i at finding interesting features")
 			readPbfFileWithHandler(filename, featureExtractor)
 			if (featureExtractor.hasUpdated())
@@ -60,20 +67,19 @@ class GeneratorService(private val geoRepo: GeometryRepository, private val tagR
 
 		logger.info("Saving GeoEntities to database")
 		val dbTimeTaken = measureTimeMillis {
-			geoRepo.saveAll(createGeoEntities(interestingFeatures.nodes))
+			geoRepo.saveAll(createGeoEntities(interestingFeatures.relations))
+
+			val dbHomogenizerTime = measureTimeMillis {
+				geomHomogenizerRepository.homogenizeAllGeoms()
+			}
+			logger.info("Took $dbHomogenizerTime ms to homogenize all geometries in database.")
+
 			geoRepo.saveAll(createGeoEntities(interestingFeatures.ways))
-			geoRepo.saveAll(createGeoEntities(relationsFilter(interestingFeatures.relations)))
+			geoRepo.saveAll(createGeoEntities(interestingFeatures.nodes))
 		}
 		logger.info("Took $dbTimeTaken ms to save GeoEntities to database.")
 	}
 
-	private fun relationsFilter(relations: Map<OsmRelation, Set<Category>>): Map<OsmRelation, Set<Category>> {
-		return relations.filter { (relation, _) ->
-			(0 until relation.numberOfMembers)
-				.map { relation.getMember(it) }
-				.none { it.type == EntityType.Relation }
-		}
-	}
 
 	@ExperimentalTime
 	private fun saveCategoriesToDatabase(interestingFeatures: InterestingFeatureFilter): List<CategoryEntity> {
@@ -82,7 +88,7 @@ class GeneratorService(private val geoRepo: GeometryRepository, private val tagR
 				categoryRepository.save(CategoryEntity(0, it))
 			}
 		}
-		logger.info("Saved categories to database in $timeTaken ms")
+		logger.info("Saved categories to database in $timeTaken")
 		return categories
 	}
 
