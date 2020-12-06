@@ -84,9 +84,10 @@ class GeneratorService(private val geoRepo: GeometryRepository,
 	@ExperimentalTime
 	private fun saveCategoriesToDatabase(interestingFeatures: InterestingFeatureFilter): List<CategoryEntity> {
 		val (categories, timeTaken) = measureTimedValue {
-			interestingFeatures.categories.map {
-				categoryRepository.save(CategoryEntity(0, it))
-			}
+			val previouslySavedCategories = categoryRepository.findAll().map { it.name }
+			interestingFeatures.categories
+				.filter { !previouslySavedCategories.contains(it) }
+				.map { categoryRepository.save(CategoryEntity(0, it)) }
 		}
 		logger.info("Saved categories to database in $timeTaken")
 		return categories
