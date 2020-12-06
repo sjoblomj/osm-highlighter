@@ -3,7 +3,6 @@ package org.sjoblomj.osmhighlighterdataprovider.service
 import org.sjoblomj.osmhighlighterdataprovider.db.CategoryRepository
 import org.sjoblomj.osmhighlighterdataprovider.db.DatabaseRepository
 import org.sjoblomj.osmhighlighterdataprovider.db.TagRepository
-import org.sjoblomj.osmhighlighterdataprovider.dtos.CategoryEntity
 import org.sjoblomj.osmhighlighterdataprovider.dtos.FeatureCount
 import org.sjoblomj.osmhighlighterdataprovider.dtos.GeoEntity
 import org.sjoblomj.osmhighlighterdataprovider.dtos.Tag
@@ -19,26 +18,31 @@ class FeatureService(private val databaseRepository: DatabaseRepository,
 										 private val tagRepository: TagRepository,
 										 categoryRepository: CategoryRepository) {
 
-	private val dbCategories: List<CategoryEntity> = categoryRepository.findAll()
+	private val dbCategories: Map<Int, String> = categoryRepository.findAll().map { it.categoryid to it.name }.toMap()
 
 
 	@GetMapping("/feature", produces = [APPLICATION_JSON_VALUE])
 	fun getFeatures(@RequestParam bbox: String, @RequestParam showNotes: Boolean = false): String {
 
 		val boundingBox = bbox.split(",").map { it.toFloat() }
+		val queryStart = System.currentTimeMillis()
 		val features = databaseRepository.getFeatures(boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3])
 
-		println("Found ${features.size} features for $bbox")
-		return "[\n" + features.joinToString(",\n") { featureToJson(it) } + "\n]"
+		println("Found ${features.size} features for $bbox in ${System.currentTimeMillis() - queryStart} ms")
+		val conversionStart = System.currentTimeMillis()
+		val json = features.map { featureToJson(it) }.toString()
+		println("getFeatures(): Json created in ${System.currentTimeMillis() - conversionStart} ms")
+		return json
 	}
 
 	@GetMapping("/featurecount", produces = [APPLICATION_JSON_VALUE])
 	fun getFeatureCount(@RequestParam bbox: String): FeatureCount {
 
 		val boundingBox = bbox.split(",").map { it.toFloat() }
+		val queryStart = System.currentTimeMillis()
 		val numberOfFeatures = databaseRepository.getFeatureCount(boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3])
 
-		println("Returning a count of $numberOfFeatures features for $bbox")
+		println("Returning a count of $numberOfFeatures features for $bbox ${System.currentTimeMillis() - queryStart} in ms")
 		return FeatureCount(numberOfFeatures)
 	}
 
@@ -54,7 +58,7 @@ class FeatureService(private val databaseRepository: DatabaseRepository,
 
 
 	fun featureToJson(geoEntity: GeoEntity): String {
-		fun createGeoJson(entityType: String) = "{${createProperties(geoEntity.id, entityType, geoEntity.category)}, ${geoEntity.geom.substring(1)}"
+		fun createGeoJson(entityType: String) = geoEntity.geom.replaceFirst("{", "\n{${createProperties(geoEntity.id, entityType, geoEntity.category)}, ")
 
 		return when {
 			geoEntity.geom.startsWith("{\"type\":\"Point\"") -> createGeoJson("node")
@@ -64,7 +68,7 @@ class FeatureService(private val databaseRepository: DatabaseRepository,
 	}
 
 	private fun createProperties(id: Long, entityType: String, categories: Collection<Int>): String {
-		val cats = categories.mapNotNull { catId -> dbCategories.find { it.categoryid == catId }?.name }.map { "\"$it\"" }
+		val cats = categories.mapNotNull { catId -> dbCategories[catId] }.joinToString(",") { "\"$it\"" }
 		val url = "https://www.openstreetmap.org/$entityType/$id"
 		return "\"properties\": {\"entityId\": \"$id\", \"url\": \"$url\", \"category\":[$cats]}"
 	}

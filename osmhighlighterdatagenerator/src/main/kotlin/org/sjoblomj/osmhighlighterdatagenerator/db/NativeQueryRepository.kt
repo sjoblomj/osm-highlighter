@@ -8,10 +8,15 @@ import org.springframework.stereotype.Repository
 import org.springframework.transaction.annotation.Transactional
 
 @Repository
-interface GeomHomogenizerRepository : CrudRepository<GeoEntity, Long> {
+interface NativeQueryRepository : CrudRepository<GeoEntity, Long> {
 
 	@Transactional
 	@Modifying
-	@Query("update geoentries g set id = g.id, geom = ST_CollectionHomogenize(g.geom);", nativeQuery = true)
+	@Query("UPDATE geoentries g SET id = g.id, geom = ST_CollectionHomogenize(g.geom);", nativeQuery = true)
 	fun homogenizeAllGeoms()
+
+	@Transactional
+	@Modifying
+	@Query("CREATE INDEX IF NOT EXISTS geo_entity_category_index ON geo_entity_category(geo_entity_id);", nativeQuery = true)
+	fun createGeoEntryCategoryIndex()
 }

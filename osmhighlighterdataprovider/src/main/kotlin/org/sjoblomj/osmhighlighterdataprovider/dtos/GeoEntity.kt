@@ -13,6 +13,6 @@ data class GeoEntity(
 	val geom: String,
 
 	@Column
-	@ElementCollection
+	@ElementCollection(fetch = FetchType.EAGER)
 	val category: Collection<Int>
 )

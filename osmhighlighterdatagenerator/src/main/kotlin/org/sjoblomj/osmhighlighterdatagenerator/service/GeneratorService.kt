@@ -11,7 +11,7 @@ import de.topobyte.osm4j.geometry.MissingEntitiesStrategy
 import de.topobyte.osm4j.geometry.MissingWayNodeStrategy
 import de.topobyte.osm4j.pbf.seq.PbfReader
 import org.sjoblomj.osmhighlighterdatagenerator.db.CategoryRepository
-import org.sjoblomj.osmhighlighterdatagenerator.db.GeomHomogenizerRepository
+import org.sjoblomj.osmhighlighterdatagenerator.db.NativeQueryRepository
 import org.sjoblomj.osmhighlighterdatagenerator.db.GeometryRepository
 import org.sjoblomj.osmhighlighterdatagenerator.db.TagRepository
 import org.sjoblomj.osmhighlighterdatagenerator.dto.CategoryEntity
@@ -26,7 +26,7 @@ import kotlin.time.measureTimedValue
 
 @Service
 class GeneratorService(private val geoRepo: GeometryRepository,
-											 private val geomHomogenizerRepository: GeomHomogenizerRepository,
+											 private val nativeQueryRepository: NativeQueryRepository,
 											 private val tagRepo: TagRepository,
 											 private val categoryRepository: CategoryRepository) {
 	private val logger = LoggerFactory.getLogger(javaClass)
@@ -68,16 +68,17 @@ class GeneratorService(private val geoRepo: GeometryRepository,
 		logger.info("Saving GeoEntities to database")
 		val dbTimeTaken = measureTimeMillis {
 			geoRepo.saveAll(createGeoEntities(interestingFeatures.relations))
-
-			val dbHomogenizerTime = measureTimeMillis {
-				geomHomogenizerRepository.homogenizeAllGeoms()
-			}
-			logger.info("Took $dbHomogenizerTime ms to homogenize all geometries in database.")
-
 			geoRepo.saveAll(createGeoEntities(interestingFeatures.ways))
 			geoRepo.saveAll(createGeoEntities(interestingFeatures.nodes))
 		}
 		logger.info("Took $dbTimeTaken ms to save GeoEntities to database.")
+
+
+		val nativeQueryTime = measureTimeMillis {
+			nativeQueryRepository.homogenizeAllGeoms()
+			nativeQueryRepository.createGeoEntryCategoryIndex()
+		}
+		logger.info("Took $nativeQueryTime ms to perform native queries.")
 	}
 
 
