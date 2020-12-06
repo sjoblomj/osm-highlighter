@@ -77,6 +77,7 @@ class GeneratorService(private val geoRepo: GeometryRepository,
 		val nativeQueryTime = measureTimeMillis {
 			nativeQueryRepository.homogenizeAllGeoms()
 			nativeQueryRepository.createGeoEntryCategoryIndex()
+			nativeQueryRepository.createHideIdsTable()
 		}
 		logger.info("Took $nativeQueryTime ms to perform native queries.")
 	}

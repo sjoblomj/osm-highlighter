@@ -56,6 +56,12 @@ class FeatureService(private val databaseRepository: DatabaseRepository,
 		return tags
 	}
 
+	@GetMapping("/hide")
+	fun hide(@RequestParam id: Long) {
+		println("Hide requested for $id")
+		databaseRepository.hide(id)
+	}
+
 
 	fun featureToJson(geoEntity: GeoEntity): String {
 		fun createGeoJson(entityType: String) = geoEntity.geom.replaceFirst("{", "\n{${createProperties(geoEntity.id, entityType, geoEntity.category)}, ")

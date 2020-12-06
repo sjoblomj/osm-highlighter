@@ -19,4 +19,9 @@ interface NativeQueryRepository : CrudRepository<GeoEntity, Long> {
 	@Modifying
 	@Query("CREATE INDEX IF NOT EXISTS geo_entity_category_index ON geo_entity_category(geo_entity_id);", nativeQuery = true)
 	fun createGeoEntryCategoryIndex()
+
+	@Transactional
+	@Modifying
+	@Query("CREATE TABLE IF NOT EXISTS hide_ids(id bigint);", nativeQuery = true)
+	fun createHideIdsTable()
 }

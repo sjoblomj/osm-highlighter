@@ -434,8 +434,9 @@
 		const url = properties.url;
 		const category = properties.category;
 
+		const button = "<button value=\"" + id + "\" onclick=\"performRestCall('/hide/?id=' + value, () => {})\">Hide</button>";
 		const link = "<a href=\"" + url + "\" target=\"_blank\">ID: " + id + "</a>";
-		return "<div id=\"" + id + "\"><b>" + category + "</b> - " + link + "<br /><b>Tags:</b><br /><div class=\"popupcontentdiv\" id=\"tagsdiv_" + id + "\"><div class=\"loader\">Loading...</div></div></div>";
+		return "<div id=\"" + id + "\"><b>" + category + "</b> - " + link + "<br /><b>Tags:</b><br /><div class=\"popupcontentdiv\" id=\"tagsdiv_" + id + "\"><div class=\"loader\">Loading...</div></div><br />" + button + "</div>";
 	}
 
 	function updatePopup(e) {
