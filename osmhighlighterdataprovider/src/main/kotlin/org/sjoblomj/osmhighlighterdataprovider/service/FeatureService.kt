@@ -29,8 +29,15 @@ class FeatureService(private val databaseRepository: DatabaseRepository,
 		val features = databaseRepository.getFeatures(boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3])
 
 		println("Found ${features.size} features for $bbox in ${System.currentTimeMillis() - queryStart} ms")
+
 		val conversionStart = System.currentTimeMillis()
-		val json = features.map { featureToJson(it) }.toString()
+		val json = features
+			.map { it.category to featureToJson(it) }
+			.flatMap { (categoryIds, json) -> categoryIds.map { it to json } }
+			.groupBy(keySelector = { it.first }, valueTransform = { it.second })
+			.map { (categoryId, geoEntities) -> lookupCategoryName(categoryId) to geoEntities }
+			.map { (categoryName, geoEntities) -> "{\"categoryName\":\"$categoryName\",\"geoEntities\":$geoEntities}" }
+			.toString()
 		println("getFeatures(): Json created in ${System.currentTimeMillis() - conversionStart} ms")
 		return json
 	}
@@ -74,8 +81,11 @@ class FeatureService(private val databaseRepository: DatabaseRepository,
 	}
 
 	private fun createProperties(id: Long, entityType: String, categories: Collection<Int>): String {
-		val cats = categories.mapNotNull { catId -> dbCategories[catId] }.joinToString(",") { "\"$it\"" }
+		val cats = lookupCategoryNames(categories).joinToString(",") { "\"$it\"" }
 		val url = "https://www.openstreetmap.org/$entityType/$id"
 		return "\"properties\": {\"entityId\": \"$id\", \"url\": \"$url\", \"category\":[$cats]}"
 	}
+
+	private fun lookupCategoryNames(categoryIds: Collection<Int>) = categoryIds.mapNotNull { lookupCategoryName(it) }
+	private fun lookupCategoryName(categoryId: Int) = dbCategories[categoryId]
 }

@@ -224,12 +224,7 @@
 			<label for="slide" style="vertical-align: 1ex;">Opacity:</label>&nbsp;<input id="slide" type="range" min="0" max="1" step="0.1" value="0.5" onchange="updateOpacity(this.value)" />
 			<fieldset>
 				<legend>Layers</legend>
-				<div id="layersdiv">
-					<div id="layersdiv_notes">
-						<input class="leaflet-control-layers-overlays" id="showNotesCheckbox" onclick=toggleFunction(this.checked) type="checkbox" />
-						<label class=formlabel for="showNotesCheckbox">Show Notes</label><br />
-					</div>
-				</div>
+				<div id="layersdiv"></div>
 			</fieldset>
 		</form>
 	</div>
@@ -239,8 +234,9 @@
 
 <script>
 	const map = L.map('mapid').setView([59.9000, 10.700], 13);
-	var layerGroup;
-	var notesLayerGroup;
+	const notesName = "Notes";
+	const layers = [];
+	addOrUpdateLayer(notesName, null);
 	var autopanning = false;
 	var currentPopup;
 
@@ -287,7 +283,8 @@
 	map.on("autopanstart", () => autopanning = true)
 
 	function mapMoved() {
-		const showNotes = document.getElementById("showNotesCheckbox").checked;
+		const showNotesElem = document.getElementById("showNotesCheckbox");
+		const showNotes = showNotesElem === null || showNotesElem.checked;
 		const bbox = map.getBounds().toBBoxString();
 		if (showNotes)
 			performRestCall("https://www.openstreetmap.org/api/0.6/notes.json?closed=0&bbox=" + bbox, updateNotes);
@@ -341,27 +338,59 @@
 
 		tbl.appendChild(tbdy);
 		return tbl;
-    }
+	}
 
 	function updateNotes(payload) {
-		if (notesLayerGroup)
-			notesLayerGroup.clearLayers();
+		const notesLayer = layers.find(layer => layer.name === notesName);
+		if (notesLayer.features)
+			notesLayer.features.removeFrom(map);
+
 		const returnedFeature = L.geoJSON(JSON.parse(payload), { onEachFeature: onEachNote, pointToLayer: (_, latlng) => { return L.marker(latlng, { icon: icon }) } });
-		notesLayerGroup = L.layerGroup([returnedFeature]);
-		notesLayerGroup.addTo(map);
+		const group = L.layerGroup([returnedFeature]);
+
+		addOrUpdateLayer(notesName, group);
+		updateMap();
 	}
 
 	function updateFeatures(payload) {
-		if (layerGroup)
-			layerGroup.clearLayers();
-		const returnedFeature = L.geoJSON(JSON.parse(payload), { onEachFeature: onEachFeature, style: style, pointToLayer: (_, latlng) => { return L.circleMarker(latlng, { icon: circleIcon }) } });
-		layerGroup = L.layerGroup([returnedFeature]);
-		layerGroup.addTo(map);
+		layers.filter(layer => layer.features).forEach(layer => layer.features.removeFrom(map));
+
+		JSON.parse(payload)
+			.forEach(categoryAndGeoEntities => {
+
+				const returnedFeatures = L.geoJSON(categoryAndGeoEntities.geoEntities, {
+					onEachFeature: onEachFeature,
+					style: style,
+					pointToLayer: (_, latlng) => {
+						return L.circleMarker(latlng, {icon: circleIcon})
+					}
+				});
+
+				const group = L.layerGroup([returnedFeatures]);
+
+				addOrUpdateLayer(categoryAndGeoEntities.categoryName, group);
+			});
+		updateMap();
 
 		if (autopanning) {
 			map.openPopup(currentPopup);
 			autopanning = false;
 		}
+	}
+
+	function addOrUpdateLayer(name, features) {
+		const currentLayer = layers.find(layer => layer.name === name);
+		if (!currentLayer)
+			layers.push({name: name, visible: true, features: features});
+		else
+			currentLayer.features = features;
+	}
+
+	function updateMap() {
+		layers.filter(layer => layer.features).forEach(layer => layer.features.removeFrom(map));
+		layers
+			.filter(layer => layer.visible && layer.features)
+			.forEach(layer => layer.features.addTo(map));
 	}
 
 	function onEachNote(feature, layer) {
@@ -460,6 +489,32 @@
 			expandedControl.style.display = "none";
 		else
 			expandedControl.style.display = "block";
+
+		const dynamicLayers = document.getElementById("layersdiv");
+		dynamicLayers.innerText = "";
+
+		layers.forEach(layer => {
+			const div = document.createElement('div');
+
+			const id = "show" + layer.name.replaceAll(" ", "") + "Checkbox";
+
+			const input = document.createElement('input');
+			input.setAttribute("class", "leaflet-control-layers-overlays");
+			input.id = id;
+			input.type = "checkbox";
+			input.checked = layer.visible;
+			input.onclick = () => { layer.visible = !layer.visible; updateMap(); };
+
+			const label = document.createElement('label');
+			label.setAttribute("class", "formlabel");
+			label.setAttribute("for", id);
+			label.innerHTML = layer.name;
+
+			div.appendChild(input);
+			div.appendChild(label);
+			dynamicLayers.appendChild(div);
+		});
+
 	}
 </script>
 
