@@ -11,8 +11,8 @@ import de.topobyte.osm4j.geometry.MissingEntitiesStrategy
 import de.topobyte.osm4j.geometry.MissingWayNodeStrategy
 import de.topobyte.osm4j.pbf.seq.PbfReader
 import org.sjoblomj.osmhighlighterdatagenerator.db.CategoryRepository
-import org.sjoblomj.osmhighlighterdatagenerator.db.NativeQueryRepository
 import org.sjoblomj.osmhighlighterdatagenerator.db.GeometryRepository
+import org.sjoblomj.osmhighlighterdatagenerator.db.NativeQueryRepository
 import org.sjoblomj.osmhighlighterdatagenerator.db.TagRepository
 import org.sjoblomj.osmhighlighterdatagenerator.dto.CategoryEntity
 import org.sjoblomj.osmhighlighterdatagenerator.dto.GeoEntity
@@ -21,8 +21,6 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.io.FileInputStream
 import kotlin.system.measureTimeMillis
-import kotlin.time.ExperimentalTime
-import kotlin.time.measureTimedValue
 
 @Service
 class GeneratorService(private val geoRepo: GeometryRepository,
@@ -31,7 +29,6 @@ class GeneratorService(private val geoRepo: GeometryRepository,
 											 private val categoryRepository: CategoryRepository) {
 	private val logger = LoggerFactory.getLogger(javaClass)
 
-	@ExperimentalTime
 	fun consumeFile(filename: String) {
 		logger.info("Starting to consume $filename")
 
@@ -41,7 +38,8 @@ class GeneratorService(private val geoRepo: GeometryRepository,
 		}
 		logger.info("Consumed in $timetaken ms")
 
-		val categories = saveCategoriesToDatabase(interestingFeatures)
+		saveCategoriesToDatabase(interestingFeatures)
+		val categories = categoryRepository.findAll()
 		saveTagsToDatabase(interestingFeatures)
 
 		val featureExtractor = FeatureExtractor(interestingFeatures.getNodes(), interestingFeatures.getWays(), interestingFeatures.getRelations())
@@ -83,16 +81,14 @@ class GeneratorService(private val geoRepo: GeometryRepository,
 	}
 
 
-	@ExperimentalTime
-	private fun saveCategoriesToDatabase(interestingFeatures: InterestingFeatureFilter): List<CategoryEntity> {
-		val (categories, timeTaken) = measureTimedValue {
+	private fun saveCategoriesToDatabase(interestingFeatures: InterestingFeatureFilter) {
+		val timeTaken = measureTimeMillis {
 			val previouslySavedCategories = categoryRepository.findAll().map { it.name }
 			interestingFeatures.categories
 				.filter { !previouslySavedCategories.contains(it) }
 				.map { categoryRepository.save(CategoryEntity(0, it)) }
 		}
-		logger.info("Saved categories to database in $timeTaken")
-		return categories
+		logger.info("Saved categories to database in $timeTaken ms")
 	}
 
 	private fun saveTagsToDatabase(interestingFeatures: InterestingFeatureFilter) {
