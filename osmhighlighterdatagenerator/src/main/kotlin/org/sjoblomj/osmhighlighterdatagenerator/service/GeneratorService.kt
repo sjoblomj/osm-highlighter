@@ -23,75 +23,53 @@ import java.io.FileInputStream
 import kotlin.system.measureTimeMillis
 
 @Service
-class GeneratorService(private val geoRepo: GeometryRepository,
-											 private val nativeQueryRepository: NativeQueryRepository,
-											 private val tagRepo: TagRepository,
-											 private val categoryRepository: CategoryRepository) {
+class GeneratorService(
+	private val featureExtractor: FeatureExtractorInterface,
+	private val categoryRepository: CategoryRepository,
+	private val tagRepo: TagRepository,
+	private val geoRepo: GeometryRepository,
+	private val nativeQueryRepository: NativeQueryRepository
+) {
 	private val logger = LoggerFactory.getLogger(javaClass)
 
 	fun consumeFile(filename: String) {
 		logger.info("Starting to consume $filename")
 
-		val interestingFeatures = InterestingFeatureFilter()
-		val timetaken = measureTimeMillis {
-			readPbfFileWithHandler(filename, interestingFeatures)
-		}
-		logger.info("Consumed in $timetaken ms")
+		extractFeatures(filename)
 
-		saveCategoriesToDatabase(interestingFeatures)
-		val categories = categoryRepository.findAll()
-		saveTagsToDatabase(interestingFeatures)
+		saveCategoriesToDatabase()
+		saveTagsToDatabase()
+		saveGeoEntitiesToDatabase()
+		performNativeQueries()
 
-		val featureExtractor = FeatureExtractor(interestingFeatures.getNodes(), interestingFeatures.getWays(), interestingFeatures.getRelations())
-		for (i in 0..10) {
-			logger.info("Iteration $i at finding interesting features")
-			readPbfFileWithHandler(filename, featureExtractor)
-			if (featureExtractor.hasUpdated())
-				featureExtractor.resetUpdateStatus()
-			else
-				break
-		}
-
-		logger.info("Finished finding interesting features; creating GeoEntities")
-		val geometryBuilder = GeometryBuilder().also {
-			it.missingWayNodeStrategy = MissingWayNodeStrategy.OMIT_VERTEX_FROM_POLYLINE
-			it.missingEntitiesStrategy = MissingEntitiesStrategy.BUILD_PARTIAL
-		}
-
-		fun <T: OsmEntity> createGeoEntities(entities: Map<T, Set<Category>>) = entities
-			.map { (entity, categorySet) -> Triple(entity.id, buildGeometry(entity, geometryBuilder, featureExtractor), categorySet) }
-			.filter { it.second != null }
-			.map { GeoEntity(it.first, it.second!!, it.third.map { category -> categories.first { categoryEntry -> categoryEntry.name == category }.categoryid })}
-
-		logger.info("Saving GeoEntities to database")
-		val dbTimeTaken = measureTimeMillis {
-			geoRepo.saveAll(createGeoEntities(interestingFeatures.relations))
-			geoRepo.saveAll(createGeoEntities(interestingFeatures.ways))
-			geoRepo.saveAll(createGeoEntities(interestingFeatures.nodes))
-		}
-		logger.info("Took $dbTimeTaken ms to save GeoEntities to database.")
-
-
-		val nativeQueryTime = measureTimeMillis {
-			nativeQueryRepository.homogenizeAllGeoms()
-			nativeQueryRepository.createGeoEntryCategoryIndex()
-			nativeQueryRepository.createHideIdsTable()
-		}
-		logger.info("Took $nativeQueryTime ms to perform native queries.")
+		logger.info("All done!")
 	}
 
+	private fun extractFeatures(filename: String) {
+		for (i in 0..featureExtractor.maxConsumptionRounds()) {
+			if (featureExtractor.shouldRunConsumptionRound()) {
+				logger.info("Iteration $i at finding interesting features")
 
-	private fun saveCategoriesToDatabase(interestingFeatures: InterestingFeatureFilter) {
+				featureExtractor.startConsumptionRound()
+				readPbfFileWithHandler(filename, featureExtractor)
+				featureExtractor.finishConsumptionRound()
+			} else
+				break
+		}
+		logger.info("Finished finding interesting features")
+	}
+
+	private fun saveCategoriesToDatabase() {
 		val timeTaken = measureTimeMillis {
 			val previouslySavedCategories = categoryRepository.findAll().map { it.name }
-			interestingFeatures.categories
+			featureExtractor.getCategoriesToBePersisted()
 				.filter { !previouslySavedCategories.contains(it) }
-				.map { categoryRepository.save(CategoryEntity(0, it)) }
+				.forEach { categoryRepository.save(CategoryEntity(0, it)) }
 		}
 		logger.info("Saved categories to database in $timeTaken ms")
 	}
 
-	private fun saveTagsToDatabase(interestingFeatures: InterestingFeatureFilter) {
+	private fun saveTagsToDatabase() {
 		fun saveTags(entities: Collection<OsmEntity>) {
 			val tags = entities.flatMap { entity ->
 				val tags = OsmModelUtil.getTagsAsMap(entity)
@@ -102,43 +80,79 @@ class GeneratorService(private val geoRepo: GeometryRepository,
 
 		logger.info("About to save tags to database")
 		val timeTaken = measureTimeMillis {
-			saveTags(interestingFeatures.getNodes())
-			saveTags(interestingFeatures.getWays())
-			saveTags(interestingFeatures.getRelations())
+			saveTags(featureExtractor.getNodesAndCategoriesToBePersisted().keys)
+			saveTags(featureExtractor.getWaysAndCategoriesToBePersisted().keys)
+			saveTags(featureExtractor.getRelationsAndCategoriesToBePersisted().keys)
 		}
 		logger.info("Saved tags in $timeTaken ms")
 	}
 
 
-	private fun buildGeometry(entity: OsmEntity, geometryBuilder: GeometryBuilder, featureExtractor: FeatureExtractor) =
-		when (entity) {
-			is OsmNode -> buildGeom(entity, geometryBuilder)
-			is OsmWay -> buildGeom(entity, geometryBuilder, featureExtractor)
-			is OsmRelation -> buildGeom(entity, geometryBuilder, featureExtractor)
-			else -> null
+	private fun saveGeoEntitiesToDatabase() {
+		logger.info("Creating GeoEntities")
+		val geometryBuilder = GeometryBuilder().also {
+			it.missingWayNodeStrategy = MissingWayNodeStrategy.OMIT_VERTEX_FROM_POLYLINE
+			it.missingEntitiesStrategy = MissingEntitiesStrategy.BUILD_PARTIAL
 		}
+
+		val allCategories = categoryRepository.findAll()
+		fun <T : OsmEntity> createGeoEntities(entities: Map<T, Collection<Category>>) = entities
+			.map { (entity, categories) -> Triple(entity.id, buildGeometry(entity, geometryBuilder), categories) }
+			.filter { it.second != null }
+			.map { (id, geom, categories) ->
+				GeoEntity(id, geom!!, categories.map { categoryName -> allCategories.first { it.name == categoryName }.categoryid }
+				)
+			}
+
+		logger.info("Saving GeoEntities to database")
+		val dbTimeTaken = measureTimeMillis {
+			geoRepo.saveAll(createGeoEntities(featureExtractor.getRelationsAndCategoriesToBePersisted()))
+			geoRepo.saveAll(createGeoEntities(featureExtractor.getWaysAndCategoriesToBePersisted()))
+			geoRepo.saveAll(createGeoEntities(featureExtractor.getNodesAndCategoriesToBePersisted()))
+		}
+		logger.info("Took $dbTimeTaken ms to save GeoEntities to database.")
+	}
+
+	private fun buildGeometry(entity: OsmEntity, geometryBuilder: GeometryBuilder) =
+		when (entity) {
+			is OsmNode     -> buildGeom(entity, geometryBuilder)
+			is OsmWay      -> buildGeom(entity, geometryBuilder)
+			is OsmRelation -> buildGeom(entity, geometryBuilder)
+			else           -> null
+		}
+
+
+	private fun performNativeQueries() {
+		val nativeQueryTime = measureTimeMillis {
+			nativeQueryRepository.homogenizeAllGeoms()
+			nativeQueryRepository.createGeoEntryCategoryIndex()
+			nativeQueryRepository.createHideIdsTable()
+		}
+		logger.info("Took $nativeQueryTime ms to perform native queries.")
+	}
+
 
 	private fun buildGeom(entity: OsmNode, geometryBuilder: GeometryBuilder) =
 		try {
 			geometryBuilder.build(entity)
 		} catch (e: Exception) {
-			logger.error("Exception for node ${entity.id}: $e")
+			logger.error("Exception for ${entity::class.java.simpleName} ${entity.id}: $e")
 			null
 		}
 
-	private fun buildGeom(entity: OsmWay, geometryBuilder: GeometryBuilder, featureExtractor: FeatureExtractor) =
+	private fun buildGeom(entity: OsmWay, geometryBuilder: GeometryBuilder) =
 		try {
 			geometryBuilder.build(entity, featureExtractor)
 		} catch (e: Exception) {
-			logger.error("Exception for way ${entity.id}: $e")
+			logger.error("Exception for ${entity::class.java.simpleName} ${entity.id}: $e")
 			null
 		}
 
-	private fun buildGeom(entity: OsmRelation, geometryBuilder: GeometryBuilder, featureExtractor: FeatureExtractor) =
+	private fun buildGeom(entity: OsmRelation, geometryBuilder: GeometryBuilder) =
 		try {
 			geometryBuilder.build(entity, featureExtractor)
 		} catch (e: Exception) {
-			logger.error("Exception for relation ${entity.id}: $e")
+			logger.error("Exception for ${entity::class.java.simpleName} ${entity.id}: $e")
 			null
 		}
 
