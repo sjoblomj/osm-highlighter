@@ -3,7 +3,6 @@ package org.sjoblomj.osmhighlighterdataprovider.service
 import org.sjoblomj.osmhighlighterdataprovider.db.CategoryRepository
 import org.sjoblomj.osmhighlighterdataprovider.db.DatabaseRepository
 import org.sjoblomj.osmhighlighterdataprovider.db.TagRepository
-import org.sjoblomj.osmhighlighterdataprovider.dtos.FeatureCount
 import org.sjoblomj.osmhighlighterdataprovider.dtos.GeoEntity
 import org.sjoblomj.osmhighlighterdataprovider.dtos.Tag
 import org.springframework.http.MediaType.APPLICATION_JSON_VALUE
@@ -14,11 +13,13 @@ import org.springframework.web.bind.annotation.RestController
 
 @CrossOrigin
 @RestController
-class FeatureService(private val databaseRepository: DatabaseRepository,
-										 private val tagRepository: TagRepository,
-										 categoryRepository: CategoryRepository) {
+class FeatureService(
+	private val databaseRepository: DatabaseRepository,
+	private val tagRepository: TagRepository,
+	categoryRepository: CategoryRepository
+) {
 
-	private val dbCategories: Map<Int, String> = categoryRepository.findAll().map { it.categoryid to it.name }.toMap()
+	private val dbCategories: Map<Int, String> = categoryRepository.findAll().associate { it.categoryid to it.name }
 
 
 	@GetMapping("/feature", produces = [APPLICATION_JSON_VALUE])
@@ -36,21 +37,10 @@ class FeatureService(private val databaseRepository: DatabaseRepository,
 			.flatMap { (categoryIds, json) -> categoryIds.map { it to json } }
 			.groupBy(keySelector = { it.first }, valueTransform = { it.second })
 			.map { (categoryId, geoEntities) -> lookupCategoryName(categoryId) to geoEntities }
-			.map { (categoryName, geoEntities) -> "{\"categoryName\":\"$categoryName\",\"geoEntities\":$geoEntities}" }
+			.map { (categoryName, geoEntities) -> "{\"categoryName\":\"$categoryName\",\"count\":${geoEntities.size},\"geoEntities\":$geoEntities}" }
 			.toString()
 		println("getFeatures(): Json created in ${System.currentTimeMillis() - conversionStart} ms")
 		return json
-	}
-
-	@GetMapping("/featurecount", produces = [APPLICATION_JSON_VALUE])
-	fun getFeatureCount(@RequestParam bbox: String): FeatureCount {
-
-		val boundingBox = bbox.split(",").map { it.toFloat() }
-		val queryStart = System.currentTimeMillis()
-		val numberOfFeatures = databaseRepository.getFeatureCount(boundingBox[0], boundingBox[1], boundingBox[2], boundingBox[3])
-
-		println("Returning a count of $numberOfFeatures features for $bbox ${System.currentTimeMillis() - queryStart} in ms")
-		return FeatureCount(numberOfFeatures)
 	}
 
 	@GetMapping("/tags", produces = [APPLICATION_JSON_VALUE])

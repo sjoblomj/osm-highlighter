@@ -10,11 +10,6 @@ import org.springframework.transaction.annotation.Transactional
 
 @Repository
 interface DatabaseRepository : CrudRepository<GeoEntity, Long> {
-	@Query("SELECT count(*) " +
-		"FROM $geoentryTableName f, " +
-		"ST_MakeEnvelope(?1, ?2, ?3, ?4) AS bbox " +
-		"WHERE ST_INTERSECTS(f.geom, bbox);", nativeQuery = true)
-	fun getFeatureCount(a: Float, b: Float, c: Float, d: Float): Int
 
 	@Query("SELECT f.id AS id, ST_AsGeoJSON(f.geom) AS geom " +
 		"FROM $geoentryTableName f, " +

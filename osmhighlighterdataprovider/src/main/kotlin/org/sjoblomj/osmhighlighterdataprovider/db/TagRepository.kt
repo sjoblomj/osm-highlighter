@@ -10,7 +10,7 @@ interface TagRepository : JpaRepository<Tag, Long> {
 
 	@Query("select tag.key as key, tag.value as value " +
 		"from $tableName tag " +
-		"where tag.id = ?1", nativeQuery = true)
+		"where tag.id = ?1", nativeQuery = true) //TODO: Do we need a native query?
 	fun findAllById(id: Long): List<Tag>
 }
 
