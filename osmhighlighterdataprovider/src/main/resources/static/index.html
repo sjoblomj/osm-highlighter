@@ -153,9 +153,17 @@
 
 
 		.popupcontentdiv {
+			word-wrap: anywhere;
 			overflow-x: hidden;
 			overflow-y: auto;
 			max-height: 33vh;
+		}
+
+		.tableCellKey {
+			min-width: 6em;
+		}
+		.tableCellValue {
+			min-width: 6em;
 		}
 
 		.speech-bubble {
@@ -309,26 +317,28 @@
 
 
 	function updateTags(tags) {
-		const tbl = document.createElement('table');
+		const tbl  = document.createElement('table');
 		const tbdy = document.createElement('tbody');
 
 		tags.forEach(tag => {
 			const tr = document.createElement('tr');
 			const isFixme = tag.key.toLowerCase().startsWith("fixme") || tag.key.toLowerCase().startsWith("todo");
-			const isNote = tag.key.toLowerCase().startsWith("note") || tag.key.toLowerCase().startsWith("description");
+			const isNote  = tag.key.toLowerCase().startsWith("note")  || tag.key.toLowerCase().startsWith("description");
 
 			if (isFixme)
 				tr.className += " fixmeRow";
 
 			const tdKey = document.createElement('td');
 			tdKey.appendChild(document.createTextNode(tag.key));
+			tdKey.className = "tableCellKey";
 			if (isFixme || isNote)
 				tdKey.appendChild(createGoogleTranslateLink(tag.value));
-			tr.appendChild(tdKey)
+			tr.appendChild(tdKey);
 
 			const tdValue = document.createElement('td');
-			tdValue.appendChild(document.createTextNode(tag.value))
-			tr.appendChild(tdValue)
+			tdValue.appendChild(document.createTextNode(tag.value));
+			tdValue.className = "tableCellValue";
+			tr.appendChild(tdValue);
 
 			tbdy.appendChild(tr);
 		});
@@ -358,9 +368,7 @@
 				const returnedFeatures = L.geoJSON(categoryAndGeoEntities.geoEntities, {
 					onEachFeature: onEachFeature,
 					style: style,
-					pointToLayer: (_, latlng) => {
-						return L.circleMarker(latlng, {icon: circleIcon})
-					}
+					pointToLayer: (_, latlng) => L.circleMarker(latlng, {icon: circleIcon})
 				});
 
 				const group = L.layerGroup([returnedFeatures]);
@@ -482,10 +490,7 @@
 	function toggleMenu(menu) {
 		menu.classList.toggle("change");
 		const expandedControl = document.getElementById("expanded-map-control");
-		if (expandedControl.style.display === "block")
-			expandedControl.style.display = "none";
-		else
-			expandedControl.style.display = "block";
+		expandedControl.style.display = expandedControl.style.display === "block" ? "none" : "block";
 
 		const dynamicLayers = document.getElementById("layersdiv");
 		dynamicLayers.innerText = "";
